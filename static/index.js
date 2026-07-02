@@ -37,7 +37,7 @@ let currentAgentText = ""; // Accumulator for Speech Synthesis
 // In Colab, the server rewrites this URL with the ngrok/cloudflare public address.
 // Locally, it connects to window.location (same origin).
 const SOCKET_URL = window.AXIS_SERVER_URL || window.location.origin;
-const socket = io(SOCKET_URL);
+const socket = io(SOCKET_URL, { transports: ['polling'] });
 
 // ── CONNECTION HANDLERS ─────────────────────────
 socket.on('connect', () => {
