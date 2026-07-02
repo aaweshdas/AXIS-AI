@@ -1,67 +1,132 @@
 # 🧠 A.X.I.S — Autonomous eXecution & Intelligence System
+### Version 2.0 (Agent OS)
 
-A fully local, open-source personal AI assistant with **persistent vector memory**, a premium **dark-mode Web UI**, and a streaming **FastAPI + Socket.io** backend — designed to run entirely inside **Google Colab** (free T4 GPU) and be accessed from any browser via a **public ngrok URL**.
+A.X.I.S (Autonomous eXecution & Intelligence System) is a fully local, open-source personal AI Agent built with a streaming **FastAPI + Socket.io** backend, persistent **ChromaDB vector memory**, and a premium **dark-mode cybernetic Web UI**. 
 
----
-
-## ✨ Features
-
-* 🤖 **Ollama LLM Integration**: Runs `llama3:8b` (or `mistral`, `gemma:2b`) locally on Colab's free GPU — fully offline after model download.
-* 💾 **Persistent ChromaDB Memory**: All conversation turns are stored as vector embeddings and retrieved semantically on each new message, giving the AI long-term contextual memory.
-* ⚡ **Real-time Streaming**: Responses stream token-by-token to the browser via Socket.io — no waiting for the full reply.
-* 🌐 **Public ngrok URL**: Exposes the local FastAPI server via a public HTTPS URL, accessible from any device.
-* 💅 **Premium Dark-Mode UI**: A glassmorphism-styled chat interface with typing indicators, message history, and a memory panel in the sidebar.
-* 🗑️ **Memory Management**: One-click "Clear Memory" button resets the ChromaDB collection for a fresh session.
+Designed to run seamlessly inside **Google Colab** utilizing the free Tesla T4 GPU, A.X.I.S is exposed to the public web with zero configuration using **Cloudflare Tunnels**, turning a Colab notebook into a private, secure, voice-enabled assistant server with a Python code interpreter sandbox and live web search capabilities.
 
 ---
 
-## 🚀 How to Run in Google Colab
+## 🔮 Key Core Capabilities
 
-1. Open [Google Colab](https://colab.research.google.com/) and make sure **Runtime → Change runtime type → T4 GPU** is selected.
-2. Upload `colab_launcher.ipynb` or open it directly from GitHub.
-3. In **Cell 4**, update `REPO_URL` to point to your GitHub fork.
-4. Run all 6 cells **from top to bottom**.
-5. After Cell 5, a live URL like `https://xxxx.ngrok.io/ui` will be printed. Open it in any browser!
+### 1. 🐍 Interactive Python Code Interpreter
+A.X.I.S has a sandboxed Python execution engine. If a query requires math, data analysis, file parsing, or charting:
+* The agent writes a Python script.
+* The backend runs it locally within the Google Colab container in a separate process.
+* **Auto-Plot Interceptor**: If the Python code uses libraries like `matplotlib` or `seaborn` and saves a chart (e.g., `plt.savefig()`), the backend automatically catches the generated image and renders it **inline** in the chat bubble.
 
-> ⏱️ **First run takes ~5 minutes** (Ollama install + `llama3:8b` download, ~4.7 GB).  
-> Subsequent Colab sessions are faster if you use Google Drive mounting to persist model weights.
+### 2. 🔍 Live Web Search & Scraping
+Equipped with real-time web crawlers, the agent can bypass the LLM's training cutoff date:
+* **DDG Scraper**: Autonomously parses DuckDuckGo HTML results for the latest news and links.
+* **Content Scraper**: Fetches raw HTML page content, cleans script and CSS style sheets, parses readable text, and feeds it into the LLM's prompt context.
+
+### 3. 🎙️ Bi-Directional Voice Mode
+Experience a touchless audio interface directly in your browser:
+* **Voice Input (STT)**: Dictate your commands using web-native speech recognition by clicking the microphone button.
+* **Voice Output (TTS)**: When enabled, the agent reads its answers back to you in real-time using built-in natural-sounding voice engines.
+
+### 4. 💾 Persistent Vector Memory (ChromaDB)
+Unlike basic chat interfaces that forget context once you close the page:
+* Every conversation turn is embedded and logged into a persistent local **ChromaDB** vector database.
+* When you ask a question, the backend queries the database for semantically similar past exchanges and injects them as `[MEMORY CONTEXT]` to maintain continuity across sessions.
+
+### 5. 📊 Live System Resource HUD
+The sidebar features a real-time hardware status monitor pulling directly from `/api/system_stats` to track:
+* **CPU Consumption** (via `psutil`)
+* **RAM Allocation** (system allocations in GB)
+* **GPU Accelerator Status** (displays the active Nvidia GPU, such as `Tesla T4`, queried directly from `nvidia-smi`).
 
 ---
 
-## 📂 File Structure
+## 🛠️ Architecture & Tech Stack
+
+```
+   [ Web Browser Client ] 
+             │
+             ▼ (HTTPS/WSS via Cloudflare Tunnel)
+     [ FastAPI Server ] 
+      ├── Socket.io (ASGI) ➔ Event Loop / Token Streaming
+      ├── ChromaDB ➔ Vector Database (Memory Context)
+      ├── System Metrics (psutil + nvidia-smi)
+      └── Sandbox execution (subprocess shell)
+             │
+             ▼ (Port 11434 Local Request)
+        [ Ollama Engine ] (Tesla T4 GPU Core)
+```
+
+| Layer | Technologies |
+| :--- | :--- |
+| **LLM Inference** | Ollama (`llama3:8b`, `mistral`, `gemma:2b`) |
+| **Vector Memory** | ChromaDB Client (Persistent Store) |
+| **Web Server** | FastAPI, Uvicorn, Python-SocketIO, HTTPX |
+| **Tunnelling** | Cloudflare Tunnels (TryCloudflare Wrapper) |
+| **Frontend** | Vanilla HTML5, CSS3 (Futuristic Cyber Glassmorphism), ES6 JavaScript |
+| **Runtime Environment** | Google Colab VM Container (Ubuntu Linux / Python 3.10+ / CUDA) |
+
+---
+
+## 🚀 Google Colab Deployment Guide
+
+Deploying A.X.I.S onto Google Colab takes less than 5 minutes and runs on a free Nvidia T4 GPU:
+
+1. Open [Google Colab](https://colab.research.google.com/).
+2. Select the **Upload** tab and upload the [colab_launcher.ipynb](file:///s:/All%20Code/Antigravity/AXIS_AI/colab_launcher.ipynb) file.
+3. Make sure GPU is enabled: Go to **Runtime** ➔ **Change runtime type** ➔ Select **T4 GPU**.
+4. Run the cells sequentially from top to bottom:
+   * **Cell 1**: Downloads the Ollama Linux binary directly, configures system directories, and launches the server.
+   * **Cell 2**: Downloads the `llama3:8b` model weights (approx 4.7 GB).
+   * **Cell 3**: Installs all required python packages.
+   * **Cell 4**: Clones/pulls the web assets from GitHub.
+   * **Cell 5**: Launches FastAPI and establishes the secure Cloudflare tunnel.
+5. In the output of **Cell 5**, you will see a public link:
+   `https://xxxx.trycloudflare.com/ui`
+6. Open this link in any browser to start using A.X.I.S!
+
+---
+
+## 📂 File Directory Structure
 
 ```
 AXIS_AI/
-├── colab_launcher.ipynb   # 6-cell Colab notebook — run top-to-bottom
-├── server.py              # FastAPI + Socket.io + Ollama + ChromaDB backend
-├── static/
-│   ├── index.html         # Premium dark-mode Web UI
-│   ├── index.css          # Glassmorphism styles & animations
-│   └── index.js           # Socket.io client + markdown renderer
-├── requirements.txt       # Python dependencies
-├── .gitignore             # Excludes memory DBs, pycaches, logs
-└── README.md              # This file
+├── colab_launcher.ipynb   # Google Colab notebook script
+├── server.py              # FastAPI backend server with Socket.io & ChromaDB
+├── requirements.txt       # Python dependencies list
+├── .gitignore             # File exclusion settings
+├── README.md              # Documentation (This file)
+└── static/                # Web UI frontend assets
+    ├── index.html         # Cyber glassmorphic layout
+    ├── index.css          # Sci-fi themed glowing animations and styles
+    ├── index.js           # Socket.io polling, Voice STT/TTS, metrics updater
+    └── plots/             # Directory where Python sandbox plots are saved
 ```
 
 ---
 
-## 🛠️ Tech Stack
+## 💻 Local Development (Local Setup)
 
-| Component | Technology |
-| :--- | :--- |
-| **LLM** | Ollama (llama3, mistral, gemma) |
-| **Memory** | ChromaDB persistent vector DB |
-| **Backend** | FastAPI + Uvicorn |
-| **Realtime** | Socket.io (python-socketio) |
-| **Tunnel** | pyngrok → free public HTTPS |
-| **Frontend** | Vanilla HTML/CSS/JS |
-| **Runtime** | Google Colab (free T4 GPU) |
+To run A.X.I.S locally on your machine instead of Google Colab:
 
----
+### Prerequisites
+* Install Python 3.10+
+* Install [Ollama](https://ollama.com/) locally.
 
-## 🔧 Local Development (non-Colab)
-
-1. Install [Ollama](https://ollama.com/) locally and run: `ollama pull llama3:8b`
-2. Install dependencies: `pip install -r requirements.txt`
-3. Start the server: `uvicorn server:socket_app --reload --port 8000`
-4. Open `http://localhost:8000/ui` in your browser.
+### Steps
+1. **Pull the model**:
+   ```bash
+   ollama pull llama3:8b
+   ```
+2. **Clone the Repository**:
+   ```bash
+   git clone https://github.com/aaweshdas/AXIS-AI.git
+   cd AXIS-AI
+   ```
+3. **Install Dependencies**:
+   ```bash
+   pip install -r requirements.txt
+   ```
+4. **Start the Server**:
+   ```bash
+   uvicorn server:socket_app --reload --port 8000
+   ```
+5. **Open in Browser**:
+   Open `http://localhost:8000/ui` in your browser.
