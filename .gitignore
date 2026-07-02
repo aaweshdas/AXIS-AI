@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+ENV/
+
+# ChromaDB local store
+axis_memory_db/
+.chroma/
+
+# Temp / logs
+*.log
+*.wav
+
+# ngrok
+.ngrok/
+
+# Colab output
+*.ipynb_checkpoints/
+
+# OS
+.DS_Store
+Thumbs.db

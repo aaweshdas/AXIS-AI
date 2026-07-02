@@ -1,0 +1,6 @@
+fastapi==0.115.5
+uvicorn==0.32.1
+python-socketio==5.11.4
+chromadb==0.5.20
+requests==2.32.3
+pyngrok==7.2.0
