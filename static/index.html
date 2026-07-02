@@ -3,10 +3,10 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>A.X.I.S — Autonomous eXecution & Intelligence System</title>
-  <meta name="description" content="A.X.I.S: Your locally-run AI agent with persistent memory, powered by Ollama." />
+  <title>A.X.I.S — Agent OS</title>
+  <meta name="description" content="A.X.I.S: Autonomous Execution & Intelligence System with Python sandboxing, voice control, and vector memory." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="index.css" />
 </head>
 <body>
@@ -14,63 +14,118 @@
   <!-- ── SIDEBAR ─────────────────────────────────────── -->
   <aside class="sidebar" id="sidebar">
     <div class="sidebar-header">
-      <div class="logo-mark">A</div>
+      <div class="logo-mark">⚡</div>
       <div class="logo-text">
-        <span class="logo-title">A.X.I.S</span>
-        <span class="logo-sub">Intelligence System</span>
+        <span class="logo-title">A.X.I.S AGENT</span>
+        <span class="logo-sub">Version 2.0 (OS)</span>
       </div>
     </div>
 
+    <!-- Status Indicator -->
     <div class="sidebar-status" id="statusBox">
       <span class="status-dot" id="statusDot"></span>
-      <span id="statusText">Connecting…</span>
+      <span id="statusText">Connecting to Core…</span>
     </div>
 
-    <div class="sidebar-section-title">Memory</div>
+    <!-- Live Performance Dashboard -->
+    <div class="sidebar-section-title">System Resources</div>
+    <div class="system-monitor">
+      <div class="metric-row">
+        <span>CPU Usage</span>
+        <strong id="cpuVal">0%</strong>
+      </div>
+      <div class="bar-container"><div class="bar" id="cpuBar" style="width: 0%"></div></div>
+
+      <div class="metric-row">
+        <span>RAM Allocation</span>
+        <strong id="ramVal">0 / 0 GB</strong>
+      </div>
+      <div class="bar-container"><div class="bar" id="ramBar" style="width: 0%"></div></div>
+
+      <div class="metric-row">
+        <span>GPU Acceleration</span>
+        <strong id="gpuVal" class="gpu-text">Detecting…</strong>
+      </div>
+    </div>
+
+    <!-- Vector Database Memory Log -->
+    <div class="sidebar-section-title">Vector Memory (Chroma)</div>
     <div class="memory-panel" id="memoryPanel">
-      <p class="memory-empty">No memory retrieved yet.</p>
+      <p class="memory-empty">No active contexts recalled.</p>
     </div>
 
+    <!-- Actions Panel -->
     <div class="sidebar-actions">
-      <button class="btn-clear" id="clearBtn">🗑 Clear Memory</button>
+      <button class="btn-sidebar btn-clear" id="clearBtn">🗑 Clear Memories</button>
     </div>
   </aside>
 
-  <!-- ── MAIN CHAT ──────────────────────────────────── -->
+  <!-- ── MAIN PANEL ─────────────────────────────────── -->
   <main class="main" id="main">
     <header class="topbar">
       <button class="topbar-toggle" id="sidebarToggle">☰</button>
       <div class="topbar-title">
-        <span class="topbar-name">A.X.I.S</span>
-        <span class="topbar-model" id="topbarModel">Connecting…</span>
+        <span class="topbar-name">AXIS Personal Assistant OS</span>
+        <span class="topbar-model" id="topbarModel">Local LLM Interface</span>
+      </div>
+      <div class="topbar-actions">
+        <!-- Voice Synth Toggle -->
+        <button class="voice-synth-btn" id="voiceSynthBtn" title="Toggle Text-To-Speech Output">
+          <svg id="speakerOnIcon" class="hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+            <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+          </svg>
+          <svg id="speakerOffIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+            <line x1="23" y1="9" x2="17" y2="15"></line>
+            <line x1="17" y1="9" x2="23" y2="15"></line>
+          </svg>
+        </button>
       </div>
     </header>
 
+    <!-- Chat Flow Area -->
     <div class="chat-feed" id="chatFeed">
-      <!-- Intro card -->
       <div class="intro-card">
-        <div class="intro-icon">🧠</div>
-        <h2>A.X.I.S Online</h2>
-        <p>Autonomous eXecution &amp; Intelligence System<br/>Powered by Ollama · ChromaDB Memory · FastAPI</p>
+        <div class="intro-icon">🔮</div>
+        <h2>A.X.I.S. Operating System</h2>
+        <p>Your fully integrated, locally executed assistant. Write calculations, search the live web, or run sandbox code in Google Colab automatically.</p>
+        <div class="suggested-prompts">
+          <button class="prompt-chip" onclick="fillInput('Search the web for the latest SpaceX Starship launch date.')">🔍 SpaceX Launch Info</button>
+          <button class="prompt-chip" onclick="fillInput('Write python code to compute the first 10 Fibonacci numbers and print them.')">🐍 Run Python Code</button>
+          <button class="prompt-chip" onclick="fillInput('Create a matplotlib line plot of sine and cosine waves from 0 to 10 and show it.')">📊 Plot Sine Waves</button>
+        </div>
       </div>
     </div>
 
+    <!-- Input Bar -->
     <div class="input-area">
       <div class="input-wrap">
+        <!-- Mic Dictation Button -->
+        <button class="mic-btn" id="micBtn" title="Speak to Voice Dictate">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+            <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+            <line x1="12" y1="19" x2="12" y2="23"></line>
+            <line x1="8" y1="23" x2="16" y2="23"></line>
+          </svg>
+        </button>
+
         <textarea
           id="userInput"
           class="input-box"
-          placeholder="Send a message…"
+          placeholder="Command A.X.I.S…"
           rows="1"
         ></textarea>
-        <button class="send-btn" id="sendBtn" title="Send">
+
+        <button class="send-btn" id="sendBtn" title="Send Command">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <line x1="22" y1="2" x2="11" y2="13"></line>
             <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
           </svg>
         </button>
       </div>
-      <p class="input-hint">Running locally via Ollama · Memory persists across reloads</p>
+      <p class="input-hint">Voice Mode enabled · Tool outputs and executions render inline</p>
     </div>
   </main>
 
