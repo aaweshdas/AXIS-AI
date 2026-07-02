@@ -1,20 +1,18 @@
 import os
-import requests
 import json
 import uuid
 import asyncio
-import threading
-import sys
+import subprocess
 import shutil
 import re
 import psutil
 import urllib.parse
+import httpx
 import chromadb
 import socketio
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel
 
 # ─────────────────────────────────────────────
 #  CONFIG & PROMPTS
@@ -24,7 +22,6 @@ MODEL       = os.getenv("AXIS_MODEL", "llama3:8b")
 MEMORY_PATH = "axis_memory_db"
 TOP_K       = 5
 
-# Custom system prompt explaining tool-calling syntax
 SYSTEM_PROMPT = """You are A.X.I.S. (Autonomous eXecution & Intelligence System), a personal agent with full capability to execute actions.
 You have access to a Python sandbox environment (Google Colab container) and the web.
 
@@ -69,7 +66,7 @@ app       = FastAPI(title="A.X.I.S Agent OS")
 socket_app = socketio.ASGIApp(sio, app)
 
 os.makedirs("static", exist_ok=True)
-os.makedirs("static/plots", exist_ok=True) # Directory to host generated plots
+os.makedirs("static/plots", exist_ok=True)
 app.mount("/ui", StaticFiles(directory="static", html=True), name="static")
 
 # ─────────────────────────────────────────────
@@ -102,15 +99,15 @@ def retrieve_memory(query: str, top_k: int = TOP_K) -> str:
         return ""
 
 # ─────────────────────────────────────────────
-#  AGENT TOOLS EXECUTION LAYER
+#  AGENT TOOLS EXECUTION LAYER (SYNCHRONOUS)
 # ─────────────────────────────────────────────
 def run_python_code(code: str) -> dict:
     """Executes code in a sandbox process, captures stdout, and detects new plots."""
+    import sys
     plot_dir = "static/plots"
-    # Find files in plots directory before run
-    pre_files = set(os.listdir(plot_dir))
+    pre_files = set(os.listdir(plot_dir)) if os.path.exists(plot_dir) else set()
+    os.makedirs(plot_dir, exist_ok=True)
     
-    # Exec the Python code in a subprocess
     temp_script = f"temp_{uuid.uuid4().hex}.py"
     with open(temp_script, "w", encoding="utf-8") as f:
         f.write(code)
@@ -133,21 +130,24 @@ def run_python_code(code: str) -> dict:
         if os.path.exists(temp_script):
             os.remove(temp_script)
 
-    # Detect if any new png image was saved in current workspace or plot_dir
     post_files = set(os.listdir("."))
     new_images = []
     
-    # Check current directory for new pngs and move them to static/plots
     for file in post_files:
         if file.endswith(".png") and not file.startswith("temp_"):
             dest = os.path.join(plot_dir, file)
-            shutil.move(file, dest)
-            new_images.append(f"/ui/plots/{file}")
+            try:
+                shutil.move(file, dest)
+                new_images.append(f"/ui/plots/{file}")
+            except Exception as e:
+                print(f"Error moving plot: {e}")
             
-    # Check static/plots directory for new files
-    for file in os.listdir(plot_dir):
-        if file.endswith(".png") and file not in pre_files:
-            new_images.append(f"/ui/plots/{file}")
+    if os.path.exists(plot_dir):
+        for file in os.listdir(plot_dir):
+            if file.endswith(".png") and file not in pre_files:
+                path = f"/ui/plots/{file}"
+                if path not in new_images:
+                    new_images.append(path)
 
     return {
         "stdout": stdout,
@@ -163,9 +163,8 @@ def run_web_search(query: str) -> str:
     }
     url = f"https://html.duckduckgo.com/html/?q={urllib.parse.quote(query)}"
     try:
-        r = requests.get(url, headers=headers, timeout=10)
+        r = httpx.get(url, headers=headers, timeout=10.0)
         r.raise_for_status()
-        # Extract title and snippets via regex (minimal parsing without bs4 to stay package independent)
         snippets = []
         matches = re.findall(r'<a class="result__snippet"[^>]*>(.*?)</a>', r.text, re.DOTALL)
         titles = re.findall(r'<a class="result__url"[^>]*>(.*?)</a>', r.text, re.DOTALL)
@@ -183,52 +182,49 @@ def run_web_scrape(url: str) -> str:
     """Scrapes raw web page text content and strips HTML tags."""
     headers = {"User-Agent": "Mozilla/5.0"}
     try:
-        r = requests.get(url, headers=headers, timeout=10)
+        r = httpx.get(url, headers=headers, timeout=10.0)
         r.raise_for_status()
         text = r.text
-        # Strip script, style, and HTML elements
         text = re.sub(r'<script.*?>.*?</script>', '', text, flags=re.DOTALL)
         text = re.sub(r'<style.*?>.*?</style>', '', text, flags=re.DOTALL)
         text = re.sub(r'<[^<]+?>', '', text)
         lines = [line.strip() for line in text.splitlines() if line.strip()]
-        return "\n".join(lines[:60]) # return first 60 lines
+        return "\n".join(lines[:60])
     except Exception as e:
         return f"Error scraping website: {e}"
 
 # ─────────────────────────────────────────────
-#  OLLAMA STREAMING AGENT CORE
+#  OLLAMA STREAMING AGENT CORE (NON-BLOCKING)
 # ─────────────────────────────────────────────
-async def get_ollama_reply(sid: str, messages: list) -> str:
-    """Handles communications with Ollama, streaming standard tokens, and parsing tool requests."""
+async def get_ollama_reply_async(sid: str, messages: list) -> str:
+    """Handles async communications with Ollama, preventing event loop blocking."""
     full_text = []
     in_tool_block = False
     
     try:
-        with requests.post(
-            OLLAMA_URL,
-            json={"model": MODEL, "messages": messages, "stream": True},
-            stream=True,
-            timeout=180
-        ) as resp:
-            resp.raise_for_status()
-            for line in resp.iter_lines():
-                if not line:
-                    continue
-                chunk = json.loads(line)
-                token = chunk.get("message", {}).get("content", "")
-                if token:
-                    full_text.append(token)
-                    # Check if token is beginning of a tool block
-                    current_accumulation = "".join(full_text)
-                    if "```tool" in current_accumulation:
-                        if not in_tool_block:
-                            in_tool_block = True
-                            await sio.emit("tool_start", {}, to=sid)
-                    else:
-                        # Stream standard text token to frontend
-                        await sio.emit("token", {"text": token}, to=sid)
-                if chunk.get("done"):
-                    break
+        async with httpx.AsyncClient(timeout=180.0) as client:
+            async with client.stream(
+                "POST", 
+                OLLAMA_URL, 
+                json={"model": MODEL, "messages": messages, "stream": True}
+            ) as response:
+                response.raise_for_status()
+                async for line in response.aiter_lines():
+                    if not line:
+                        continue
+                    chunk = json.loads(line)
+                    token = chunk.get("message", {}).get("content", "")
+                    if token:
+                        full_text.append(token)
+                        current_accumulation = "".join(full_text)
+                        if "```tool" in current_accumulation:
+                            if not in_tool_block:
+                                in_tool_block = True
+                                await sio.emit("tool_start", {}, to=sid)
+                        else:
+                            await sio.emit("token", {"text": token}, to=sid)
+                    if chunk.get("done"):
+                        break
     except Exception as e:
         err = f"\n\n[A.X.I.S Server Error]: {e}"
         await sio.emit("token", {"text": err}, to=sid)
@@ -238,8 +234,7 @@ async def get_ollama_reply(sid: str, messages: list) -> str:
 
 async def agent_loop(sid: str, user_text: str):
     """Core reasoning loop of A.X.I.S. Supports multiple tool execution loops per turn."""
-    # Retrieve memories
-    past_context = retrieve_memory(user_text)
+    past_context = await asyncio.to_thread(retrieve_memory, user_text)
     context_block = f"\n\n[MEMORY CONTEXT]:\n{past_context}\n\n" if past_context else ""
 
     messages = [
@@ -254,13 +249,11 @@ async def agent_loop(sid: str, user_text: str):
     
     while loop_count < max_loops:
         loop_count += 1
-        reply = await get_ollama_reply(sid, messages)
+        reply = await get_ollama_reply_async(sid, messages)
         
-        # Check for tool call blocks: ```tool { ... } ```
         tool_match = re.search(r'```tool\s*(\{.*?\})\s*```', reply, re.DOTALL)
         
         if tool_match:
-            # We found a tool call!
             tool_json_str = tool_match.group(1)
             try:
                 tool_data = json.loads(tool_json_str)
@@ -271,29 +264,28 @@ async def agent_loop(sid: str, user_text: str):
                 tool_result = ""
                 images = []
                 
-                # Execute specific tool
                 if tool_name == "python_execute":
                     code = tool_data.get("code", "")
-                    exec_result = run_python_code(code)
+                    # Run CPU-bound subprocess in a thread pool to avoid blocking async event loop
+                    exec_result = await asyncio.to_thread(run_python_code, code)
                     tool_result = f"STDOUT:\n{exec_result['stdout']}\nSTDERR:\n{exec_result['stderr']}\nExit Code: {exec_result['exit_code']}"
                     images = exec_result["images"]
                 elif tool_name == "web_search":
                     query = tool_data.get("query", "")
-                    tool_result = run_web_search(query)
+                    # Run IO-bound scraping in a thread pool
+                    tool_result = await asyncio.to_thread(run_web_search, query)
                 elif tool_name == "web_scrape":
                     url = tool_data.get("url", "")
-                    tool_result = run_web_scrape(url)
+                    tool_result = await asyncio.to_thread(run_web_scrape, url)
                 else:
                     tool_result = f"Unknown tool: {tool_name}"
                 
-                # Send tool results to user UI
                 await sio.emit("tool_result", {
                     "tool": tool_name,
                     "result": tool_result,
                     "images": images
                 }, to=sid)
                 
-                # Feed tool execution result back to LLM context
                 messages.append({"role": "assistant", "content": reply})
                 messages.append({
                     "role": "user",
@@ -306,9 +298,8 @@ async def agent_loop(sid: str, user_text: str):
                 messages.append({"role": "assistant", "content": reply})
                 messages.append({"role": "user", "content": f"[SYSTEM ERROR]: {err_msg}"})
         else:
-            # No tool call was requested. We are done!
-            store_memory("user", user_text)
-            store_memory("axis", reply)
+            await asyncio.to_thread(store_memory, "user", user_text)
+            await asyncio.to_thread(store_memory, "axis", reply)
             break
 
     await sio.emit("stream_end", {}, to=sid)
@@ -329,7 +320,6 @@ async def disconnect(sid):
 async def chat(sid, data):
     user_text = data.get("message", "").strip()
     if user_text:
-        # Start reasoning loop in background
         asyncio.create_task(agent_loop(sid, user_text))
 
 @sio.event
@@ -347,18 +337,12 @@ async def clear_memory(sid, data):
 # ─────────────────────────────────────────────
 @app.get("/api/system_stats")
 def system_stats():
-    """Gets CPU, RAM, Disk, and general system health (vital for Colab profiling)."""
-    # CPU usage
     cpu_percent = psutil.cpu_percent(interval=None)
-    # Virtual Memory
     vm = psutil.virtual_memory()
-    # Disk Usage
     disk = psutil.disk_usage("/")
     
-    # Try to resolve GPU VRAM usage if NVIDIA GPU is present
     gpu_info = "N/A"
     try:
-        import subprocess
         gpu_raw = subprocess.check_output(
             ["nvidia-smi", "--query-gpu=name,memory.used,memory.total", "--format=csv,noheader,nounits"],
             text=True
